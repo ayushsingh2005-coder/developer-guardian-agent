@@ -1,7 +1,7 @@
 {
   "name": "systemguardian",
   "version": "1.0.2",
-  "description": "AI-powered developer safety agent that monitors and analyzes shell commands in real-time",
+  "description": "AI-powered CLI tool to detect and prevent dangerous terminal commands with real-time risk analysis and security warnings",
   "main": "src/cli/index.js",
   "type": "commonjs",
   "bin": {
@@ -13,11 +13,21 @@
   },
   "keywords": [
     "cli",
+    "cli-tool",
+    "terminal",
+    "terminal-security",
+    "command",
+    "command-analyzer",
+    "shell",
+    "shell-security",
     "security",
     "devtools",
+    "developer-tools",
     "ai",
-    "terminal",
-    "monitoring"
+    "automation",
+    "monitoring",
+    "linux",
+    "windows"
   ],
   "author": "Ayush Singh",
   "license": "MIT",
