@@ -81,3 +81,11 @@ The extension code is fully prepared in `vscode-extension/`. You can package it 
 
 ## Security Guarantee
 Guardian is built 100% in user-space using standard Node.js libraries. No kernel hooks, no hidden behaviors. Everything is strictly transparent and logged in JSON format.
+
+## ⚠️ API Key Required
+
+You must provide your own Gemini API key.
+
+Create `.env`:
+
+GEMINI_API_KEY=your_key_here
