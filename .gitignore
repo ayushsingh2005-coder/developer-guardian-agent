@@ -27,3 +27,5 @@ Thumbs.db
 # Build
 dist/
 *.tgz
+
+desktop.ini
