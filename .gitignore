@@ -1,4 +1,29 @@
-node_modules/
+# Environment & secrets
 .env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.cert
+*.crt
+
+# Guardian runtime files
 logs/
+guardian.log
+src/logs/
 guardian-config.json
+
+# Dependencies
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/settings.json
+
+# Build
+dist/
+*.tgz

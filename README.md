@@ -89,3 +89,29 @@ You must provide your own Gemini API key.
 Create `.env`:
 
 GEMINI_API_KEY=your_key_here
+
+# 🛡️ Developer Guardian Agent
+
+An AI-powered, context-aware developer safety layer that monitors and analyzes terminal commands in real time.
+
+Guardian helps prevent dangerous operations (like `rm -rf /`, `chmod 777`, etc.) by analyzing risk, explaining consequences, and suggesting safer alternatives.
+
+---
+
+## 🚀 Features
+
+- 🔍 **Context-Aware Risk Analysis** (Git, Docker, OS-aware)
+- 📊 **Dynamic Risk Scoring (0–100)**
+- 🤖 **AI-Powered Explanations (Google Gemini)**
+- 🧠 **Fallback Mode (works even without AI)**
+- 🖥️ **CLI Shell Protection**
+- 🔁 **Background System Monitoring**
+- 🧩 **VS Code Extension Support**
+- ⚡ **Cross-platform (Windows, Linux, Mac)**
+
+---
+
+## 📦 Installation
+
+```bash
+npm install -g systemguardian
