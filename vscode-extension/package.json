@@ -1,0 +1,30 @@
+{
+  "name": "developer-guardian-vscode",
+  "displayName": "Developer Guardian",
+  "description": "Analyzes terminal commands and provides inline warnings for dangerous actions.",
+  "version": "1.0.0",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onTerminalProfile"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "developer-guardian.analyzeLastCommand",
+        "title": "Analyze Last Terminal Command"
+      }
+    ]
+  },
+  "dependencies": {
+    "chalk": "^4.1.2"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0"
+  }
+}

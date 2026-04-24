@@ -1,0 +1,31 @@
+{
+  "name": "systemguardian",
+  "version": "1.0.0",
+  "description": "AI-powered developer safety agent that monitors and analyzes shell commands in real-time",
+  "main": "index.js",
+  "type": "commonjs",
+  "bin": {
+    "guardian": "./src/cli/index.js"
+  },
+  "scripts": {
+    "start": "node ./src/cli/index.js",
+    "postinstall": "node ./src/cli/installer.js --postinstall"
+  },
+  "keywords": [
+    "cli",
+    "security",
+    "devtools",
+    "ai",
+    "terminal",
+    "monitoring"
+  ],
+  "author": "Ayush Singh",
+  "license": "MIT",
+  "dependencies": {
+    "@google/genai": "^1.50.1",
+    "chalk": "^4.1.2",
+    "chokidar": "^5.0.0",
+    "dotenv": "^17.4.2",
+    "node-fetch": "^2.7.0"
+  }
+}

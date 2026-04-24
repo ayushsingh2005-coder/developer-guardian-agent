@@ -1,0 +1,22 @@
+{
+  "dangerous": [
+    "rm -rf",
+    "sudo rm",
+    "sudo mkfs",
+    "docker system prune -a",
+    "chmod 777",
+    "0.0.0.0",
+    "format c:",
+    "del /s /q",
+    "Remove-Item -Recurse -Force"
+  ],
+  "warning": [
+    "sudo",
+    "npm publish",
+    "git push --force",
+    "git push origin master -f",
+    "wget",
+    "curl",
+    "Drop-Database"
+  ]
+}

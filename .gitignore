@@ -1,0 +1,4 @@
+node_modules/
+.env
+logs/
+guardian-config.json
