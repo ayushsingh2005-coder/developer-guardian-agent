@@ -1,5 +1,7 @@
+'use strict';
+
 const readline = require('readline');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const os = require('os');
 const path = require('path');
 const chalk = require('chalk');
@@ -13,13 +15,10 @@ const isWindows = os.platform() === 'win32';
 const shellCmd = isWindows ? 'powershell.exe' : (process.env.SHELL || 'bash');
 const HOME_DIR = os.homedir();
 
-// ✅ FIX 6.1: Command length limit
 const MAX_COMMAND_LENGTH = 2048;
+const RATE_LIMIT = { max: 30, windowMs: 60000 };
 
-let rl;
-let config = loadConfig();
-
-// ✅ FIX 2.1: Whitelisted navigation roots
+// ✅ Whitelisted navigation roots
 const ALLOWED_ROOTS = [
   HOME_DIR,
   path.join(HOME_DIR, 'Desktop'),
@@ -29,67 +28,268 @@ const ALLOWED_ROOTS = [
   process.cwd()
 ];
 
+// ✅ Blocked shell injection patterns
+const BLOCKED_PATTERNS = [
+  /\$\(/,
+  /`[^`]*`/,
+  />\s*\/etc\//,
+  /curl\s+.*\|\s*(ba)?sh/i,
+  /wget\s+.*\|\s*(ba)?sh/i,
+  /eval\s*[\s(]/i,
+  /base64\s*(--decode|-d)/i,
+  /\\x[0-9a-fA-F]{2}/,
+  /\\u[0-9a-fA-F]{4}/,
+  /\/dev\/(tcp|udp)\//i,
+  /nc\s+-.*-e/i,
+  /python.*-c\s+['"]import/i,
+  /bash\s+-i\s+>&/i,
+  /proc\/self\/environ/i,
+  /\.\.\/\.\.\/\.\.\//,
+  /:\(\)\{/,   // fork bomb
+];
+
+// ── Command history (in-memory, this session) ──────────────
+const sessionHistory = [];
+const MAX_HISTORY = 200;
+
+function addToHistory(cmd) {
+  if (sessionHistory[sessionHistory.length - 1] !== cmd) {
+    sessionHistory.push(cmd);
+    if (sessionHistory.length > MAX_HISTORY) sessionHistory.shift();
+  }
+}
+
+// ── Rate limiting ───────────────────────────────────────────
+let commandTimestamps = [];
+
+function isRateLimited() {
+  const now = Date.now();
+  commandTimestamps = commandTimestamps.filter(t => now - t < RATE_LIMIT.windowMs);
+  if (commandTimestamps.length >= RATE_LIMIT.max) {
+    console.error(chalk.bgRed.white(`\n 🚨 RATE LIMIT — max ${RATE_LIMIT.max} commands/min \n`));
+    return true;
+  }
+  commandTimestamps.push(now);
+  return false;
+}
+
+// ── Path safety ─────────────────────────────────────────────
 function isSafePath(targetPath) {
   const resolved = path.resolve(targetPath);
   return ALLOWED_ROOTS.some(root => resolved.startsWith(root));
 }
 
-// ✅ FIX 1.1: Expanded BLOCKED_PATTERNS — covers bypasses, encoded chars, hex, octal
-const BLOCKED_PATTERNS = [
-  /[;&|`$(){}<>]/,                        // shell metacharacters
-  /\$\(/,                                  // command substitution
-  /`[^`]*`/,                               // backtick execution
-  />\s*\/etc\//,                           // redirect to system paths
-  />\s*~\//,                               // redirect to home
-  /curl\s+.*\|\s*(ba)?sh/i,               // curl pipe shell
-  /wget\s+.*\|\s*(ba)?sh/i,               // wget pipe shell
-  /eval\s*[\s(]/i,                         // eval()
-  /base64\s*(--decode|-d)/i,              // base64 decode
-  /\$\{.*\}/,                              // variable expansion
-  /\\x[0-9a-fA-F]{2}/,                    // hex encoded chars
-  /\\u[0-9a-fA-F]{4}/,                    // unicode escape sequences
-  /%[0-9a-fA-F]{2}/,                      // URL encoded chars
-  /\$'\\.*/,                               // ANSI-C quoting bypass
-  /\/dev\/(tcp|udp)\//i,                  // reverse shell via /dev/tcp
-  /nc\s+-.*-e/i,                           // netcat reverse shell
-  /python.*-c\s+['"]import/i,             // python reverse shell
-  /bash\s+-i\s+>&/i,                       // bash reverse shell
-  /0\.0\.0\.0|127\.0\.0\.1/,              // localhost binding
-  /proc\/self\/environ/i,                  // proc environ access
-  /\.\.\/\.\.\/\.\.\//,                   // deep path traversal
-];
-
 function isSafeCommand(command) {
-  // ✅ FIX 6.1: Reject oversized commands
   if (command.length > MAX_COMMAND_LENGTH) {
     console.error(chalk.red(`Command too long (${command.length} chars). Max: ${MAX_COMMAND_LENGTH}`));
     return false;
   }
-  return !BLOCKED_PATTERNS.some(pattern => pattern.test(command));
+  return !BLOCKED_PATTERNS.some(p => p.test(command));
 }
 
-function updatePrompt() {
-  const modeText = config.safeMode ? chalk.bgGreen.black(' [SAFE MODE] ') : '';
-  rl.setPrompt(chalk.cyan(`guardian-shell${modeText}> `));
+// ── Built-in commands ────────────────────────────────────────
+
+function handleBuiltins(trimmed, rl) {
+  // history
+  if (trimmed === 'history') {
+    if (sessionHistory.length === 0) {
+      console.log(chalk.gray('No commands in history yet.'));
+    } else {
+      sessionHistory.forEach((cmd, i) => {
+        console.log(chalk.gray(`  ${String(i + 1).padStart(3)}  ${cmd}`));
+      });
+    }
+    return true;
+  }
+
+  // last
+  if (trimmed === 'last') {
+    const last = sessionHistory[sessionHistory.length - 2]; // -1 is 'last' itself
+    if (!last) console.log(chalk.gray('No previous command found.'));
+    else console.log(chalk.cyan(`Last command: ${last}`));
+    return true;
+  }
+
+  // pwd
+  if (trimmed === 'pwd') {
+    console.log(chalk.cyan(process.cwd()));
+    return true;
+  }
+
+  // whoami
+  if (trimmed === 'whoami') {
+    try {
+      const user = os.userInfo().username;
+      console.log(chalk.cyan(user));
+    } catch (_) {
+      console.log(chalk.red('Could not determine user.'));
+    }
+    return true;
+  }
+
+  // ls / dir
+  if (trimmed === 'ls' || trimmed === 'ls -la' || trimmed === 'dir') {
+    try {
+      const cmd = isWindows ? 'dir' : trimmed;
+      const out = execSync(cmd, { cwd: process.cwd(), stdio: 'pipe', timeout: 5000 }).toString();
+      console.log(out);
+    } catch (err) {
+      console.error(chalk.red(`ls error: ${err.message}`));
+    }
+    return true;
+  }
+
+  // info <command>
+  if (trimmed.startsWith('info ')) {
+    const target = trimmed.slice(5).trim();
+    if (!target) {
+      console.log(chalk.red('Usage: info <command>  e.g. info rm -rf'));
+      return true;
+    }
+    printCommandInfo(target);
+    return true;
+  }
+
+  // clear
+  if (trimmed === 'clear' || trimmed === 'cls') {
+    process.stdout.write('\x1Bc');
+    return true;
+  }
+
+  // status
+  if (trimmed === 'status') {
+    const config = loadConfig();
+    console.log(chalk.bold('\n🛡️  Guardian Status'));
+    console.log(chalk.gray('─────────────────────────────'));
+    console.log(`  Safe Mode  : ${config.safeMode ? chalk.green('ON') : chalk.yellow('OFF')}`);
+    console.log(`  API Key    : ${config.apiKey ? chalk.green('Configured ✓') : chalk.red('Not set — run: guardian config --key YOUR_KEY')}`);
+    console.log(`  Session Cmds: ${chalk.cyan(sessionHistory.length)}`);
+    console.log(`  Platform   : ${chalk.cyan(os.platform())} / ${chalk.cyan(os.arch())}`);
+    console.log(chalk.gray('─────────────────────────────\n'));
+    return true;
+  }
+
+  // help
+  if (trimmed === 'help') {
+    printHelp();
+    return true;
+  }
+
+  return false; // not a builtin
 }
+
+function printCommandInfo(cmd) {
+  const INFO = {
+    'rm -rf': {
+      desc: 'Recursively deletes files and directories without confirmation.',
+      risk: 'HIGH — irreversible data loss if wrong path used.',
+      safe: 'Use only with exact known paths. Never on / or ~.',
+      alt: 'trash-cli or mv to a temp folder first.'
+    },
+    'chmod 777': {
+      desc: 'Grants read/write/execute to ALL users on file/folder.',
+      risk: 'HIGH — serious security vulnerability.',
+      safe: 'Never on system files. Use 755 for dirs, 644 for files.',
+      alt: 'chmod 755 <dir> or chmod 644 <file>'
+    },
+    'git push --force': {
+      desc: 'Force overwrites remote branch history.',
+      risk: 'HIGH on main/master — destroys teammates work.',
+      safe: 'Only on personal feature branches you own.',
+      alt: 'git push --force-with-lease (safer version)'
+    },
+    'sudo': {
+      desc: 'Runs command as root/superuser.',
+      risk: 'MEDIUM — root can modify any file.',
+      safe: 'Use only when absolutely required.',
+      alt: 'Check if the task can be done without elevated privileges.'
+    },
+    'dd': {
+      desc: 'Direct disk read/write — bypasses filesystem.',
+      risk: 'CRITICAL — can wipe entire drives silently.',
+      safe: 'Only when creating disk images with verified paths.',
+      alt: 'Use cp or rsync for normal file operations.'
+    },
+    'curl': {
+      desc: 'Transfers data from/to URLs.',
+      risk: 'LOW alone, HIGH if piped to sh/bash.',
+      safe: 'Download to file first, inspect, then execute.',
+      alt: 'curl -o script.sh <url> && cat script.sh && bash script.sh'
+    },
+    'wget': {
+      desc: 'Downloads files from the web.',
+      risk: 'LOW alone, HIGH if piped to sh/bash.',
+      safe: 'Same as curl — never pipe directly to shell.',
+      alt: 'wget -O script.sh <url> && cat script.sh'
+    },
+    'docker system prune': {
+      desc: 'Removes all unused Docker containers, images, volumes.',
+      risk: 'MEDIUM-HIGH — data loss if volumes have important data.',
+      safe: 'Run docker ps and docker volume ls first to verify.',
+      alt: 'docker container prune (containers only)'
+    },
+    'mkfs': {
+      desc: 'Formats a disk/partition with a filesystem.',
+      risk: 'CRITICAL — permanently erases all data on device.',
+      safe: 'Only on verified empty/new devices.',
+      alt: 'Double-check device path with lsblk before running.'
+    }
+  };
+
+  const found = INFO[cmd] || INFO[cmd.toLowerCase()];
+  if (!found) {
+    console.log(chalk.yellow(`No info entry for "${cmd}". Try: info rm -rf, info chmod 777, info sudo, info dd`));
+    return;
+  }
+
+  console.log(chalk.bold(`\n📖 Info: ${cmd}`));
+  console.log(chalk.gray('─────────────────────────────────────'));
+  console.log(`  ${chalk.bold('What it does :')} ${found.desc}`);
+  console.log(`  ${chalk.bold('Risk         :')} ${chalk.red(found.risk)}`);
+  console.log(`  ${chalk.bold('Safe when    :')} ${found.safe}`);
+  console.log(`  ${chalk.bold('Alternative  :')} ${chalk.green(found.alt)}`);
+  console.log(chalk.gray('─────────────────────────────────────\n'));
+}
+
+function printHelp() {
+  console.log(chalk.bold('\n🛡️  Guardian Shell — Available Commands'));
+  console.log(chalk.gray('════════════════════════════════════════'));
+  const cmds = [
+    ['history',         'Show all commands run this session'],
+    ['last',            'Show the last command you ran'],
+    ['status',          'Show guardian config & API key status'],
+    ['info <cmd>',      'Explain risk of a command (e.g. info rm -rf)'],
+    ['ls / ls -la',     'List files in current directory'],
+    ['pwd',             'Print current directory'],
+    ['whoami',          'Show current user'],
+    ['clear',           'Clear terminal screen'],
+    ['exit / quit',     'Exit guardian shell'],
+    ['help',            'Show this help'],
+  ];
+  cmds.forEach(([cmd, desc]) => {
+    console.log(`  ${chalk.cyan(cmd.padEnd(20))} ${desc}`);
+  });
+  console.log(chalk.gray('════════════════════════════════════════\n'));
+}
+
+// ── Command execution ────────────────────────────────────────
 
 async function executeCommand(command) {
   return new Promise((resolve) => {
 
-    // ✅ FIX 2.1: Safe cd with path validation
     if (command.startsWith('cd ')) {
       const dir = command.substring(3).trim();
       const resolved = path.resolve(dir);
 
       if (!isSafePath(resolved)) {
-        console.error(chalk.red(`cd: Access denied — cannot navigate to ${resolved}`));
+        console.error(chalk.red(`cd: Access denied — ${resolved} is outside allowed roots.`));
         resolve(1);
         return;
       }
 
       try {
         process.chdir(resolved);
-        console.log(chalk.gray(`cwd: ${process.cwd()}`));
+        console.log(chalk.gray(`→ ${process.cwd()}`));
       } catch (err) {
         console.error(chalk.red(`cd: ${err.message}`));
       }
@@ -97,25 +297,24 @@ async function executeCommand(command) {
       return;
     }
 
-    // ✅ FIX 1.1: Block dangerous patterns
     if (!isSafeCommand(command)) {
-      console.error(chalk.bgRed.white.bold('\n 🚨 BLOCKED — Dangerous pattern detected 🚨 \n'));
+      console.error(chalk.bgRed.white.bold('\n 🚨 BLOCKED — Shell injection pattern detected 🚨 \n'));
       logAction('BLOCKED_INJECTION', command, 100);
       resolve(1);
       return;
     }
 
-    const args = isWindows
+    const spawnArgs = isWindows
       ? ['-NoProfile', '-NonInteractive', '-Command', command]
       : ['-c', command];
 
-    const child = spawn(shellCmd, args, {
+    const child = spawn(shellCmd, spawnArgs, {
       stdio: 'inherit',
-      env: process.env,
+      env: { ...process.env },
       cwd: process.cwd()
     });
 
-    child.on('close', (code) => resolve(code));
+    child.on('close', (code) => resolve(code ?? 0));
     child.on('error', (err) => {
       console.error(chalk.red(`Execution error: ${err.message}`));
       resolve(1);
@@ -123,47 +322,39 @@ async function executeCommand(command) {
   });
 }
 
-// ✅ FIX 6.2: Rate limiting — max 30 commands per minute
-const RATE_LIMIT = { max: 30, windowMs: 60000 };
-let commandTimestamps = [];
+// ── Main command handler ─────────────────────────────────────
 
-function isRateLimited() {
-  const now = Date.now();
-  commandTimestamps = commandTimestamps.filter(t => now - t < RATE_LIMIT.windowMs);
-  if (commandTimestamps.length >= RATE_LIMIT.max) {
-    console.error(chalk.bgRed.white(`\n 🚨 RATE LIMIT EXCEEDED — ${RATE_LIMIT.max} commands/min max \n`));
-    logAction('RATE_LIMITED', `${commandTimestamps.length} commands in window`, 50);
-    return true;
-  }
-  commandTimestamps.push(now);
-  return false;
-}
-
-async function handleCommand(command, simulate = false) {
+async function handleCommand(command, rl, simulate = false) {
   const trimmed = command.trim();
-  if (!trimmed) {
-    if (rl) rl.prompt();
-    return;
-  }
+  if (!trimmed) return;
 
   if (trimmed === 'exit' || trimmed === 'quit') {
-    console.log(chalk.green('Exiting Guardian Shell.'));
+    console.log(chalk.green('Exiting Guardian Shell. Stay safe!'));
     process.exit(0);
   }
 
-  // ✅ FIX 6.2: Check rate limit before processing
-  if (!simulate && isRateLimited()) {
-    if (rl) rl.prompt();
+  addToHistory(trimmed);
+
+  // Check builtins first
+  if (handleBuiltins(trimmed, rl)) {
+    rl.prompt();
     return;
   }
 
+  if (!simulate && isRateLimited()) {
+    rl.prompt();
+    return;
+  }
+
+  const config = loadConfig();
   const analysis = analyzer.analyzeCommand(trimmed);
 
+  // Trusted command — skip analysis
   if (config.trustedCommands.includes(trimmed)) {
-    console.log(chalk.gray('[Trusted Command]'));
+    console.log(chalk.gray('[Trusted] Skipping analysis.'));
     logAction('EXECUTE_TRUSTED', trimmed, analysis.score);
     if (!simulate) await executeCommand(trimmed);
-    if (rl) rl.prompt();
+    rl.prompt();
     return;
   }
 
@@ -171,8 +362,8 @@ async function handleCommand(command, simulate = false) {
     if (config.safeMode && !simulate) {
       console.log(chalk.bgRed.white.bold('\n 🚨 BLOCKED BY SAFE MODE 🚨 \n'));
       console.log(chalk.red(`Score: ${analysis.score}/100 | Rule: ${analysis.match}`));
-      logAction('BLOCKED_SAFE_MODE', trimmed, analysis.score, analysis.context);
-      if (rl) rl.prompt();
+      logAction('BLOCKED_SAFE_MODE', trimmed, analysis.score);
+      rl.prompt();
       return;
     }
 
@@ -181,17 +372,18 @@ async function handleCommand(command, simulate = false) {
 
     if (simulate) {
       console.log(chalk.blue('\n[Dry Run] Command would be BLOCKED pending confirmation.'));
-      if (rl) rl.prompt();
+      rl.prompt();
       return;
     }
 
-    logAction('DANGER_PROMPT', trimmed, analysis.score, { ...analysis.context, ai: explanation });
+    logAction('DANGER_PROMPT', trimmed, analysis.score);
 
-    rl.question(chalk.bgRed.white.bold(' Are you absolutely sure? (y/N/trust) '), async (answer) => {
-      if (answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes') {
+    rl.question(chalk.bgRed.white.bold(' ⚠️  Are you sure? (y / N / trust) '), async (answer) => {
+      const a = answer.trim().toLowerCase();
+      if (a === 'y' || a === 'yes') {
         logAction('BYPASS', trimmed, analysis.score);
         await executeCommand(trimmed);
-      } else if (answer.toLowerCase() === 'trust') {
+      } else if (a === 'trust') {
         config.trustedCommands.push(trimmed);
         saveConfig(config);
         logAction('TRUSTED', trimmed, analysis.score);
@@ -200,7 +392,7 @@ async function handleCommand(command, simulate = false) {
         logAction('PREVENTED', trimmed, analysis.score);
         console.log(chalk.green('Command cancelled.'));
       }
-      if (rl) rl.prompt();
+      rl.prompt();
     });
 
   } else if (analysis.level === 'warning') {
@@ -208,49 +400,67 @@ async function handleCommand(command, simulate = false) {
     printAnalysis(analysis, explanation);
 
     if (simulate) {
-      console.log(chalk.blue('\n[Dry Run] WARNING — would allow execution.'));
-      if (rl) rl.prompt();
+      console.log(chalk.blue('\n[Dry Run] WARNING — would allow with notice.'));
+      rl.prompt();
       return;
     }
 
-    logAction('EXECUTE_WARNING', trimmed, analysis.score, { ...analysis.context, ai: explanation });
+    logAction('EXECUTE_WARNING', trimmed, analysis.score);
     await executeCommand(trimmed);
-    if (rl) rl.prompt();
+    rl.prompt();
+
   } else {
     if (simulate) {
       console.log(chalk.bgGreen.black.bold(` ✅ SAFE (Score: ${analysis.score}/100) `));
-      if (rl) rl.prompt();
+      rl.prompt();
       return;
     }
-    logAction('EXECUTE_SAFE', trimmed, analysis.score, analysis.context);
+    logAction('EXECUTE_SAFE', trimmed, analysis.score);
     await executeCommand(trimmed);
-    if (rl) rl.prompt();
+    rl.prompt();
   }
 }
 
+// ── Shell entry point ────────────────────────────────────────
+
 function startShell(simulateCommand = null) {
-  rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: true
+  });
 
   if (simulateCommand) {
-    console.log(chalk.blue(`\n=== Guardian Simulation: ${simulateCommand} ===`));
-    handleCommand(simulateCommand, true).then(() => process.exit(0));
+    console.log(chalk.blue(`\n=== Guardian Simulation: "${simulateCommand}" ===\n`));
+    handleCommand(simulateCommand, rl, true).then(() => {
+      rl.close();
+      process.exit(0);
+    });
     return;
   }
 
-  console.log(chalk.green('================================================'));
-  console.log(chalk.green.bold('🛡️  Developer Guardian Agent Shell Activated 🛡️'));
-  console.log(chalk.green('================================================'));
-  console.log(chalk.gray('All commands are monitored and analyzed in real-time.\n'));
+  console.log(chalk.green('════════════════════════════════════════════'));
+  console.log(chalk.green.bold('  🛡️  Guardian Shell Active — Type help'));
+  console.log(chalk.green('════════════════════════════════════════════\n'));
+
+  function updatePrompt() {
+    const config = loadConfig();
+    const mode = config.safeMode ? chalk.bgGreen.black(' SAFE ') : '';
+    rl.setPrompt(chalk.cyan(`guardian ${mode}❯ `));
+  }
 
   updatePrompt();
   rl.prompt();
 
   rl.on('line', async (line) => {
     rl.pause();
-    await handleCommand(line);
+    await handleCommand(line, rl);
+    updatePrompt();
     rl.resume();
-  }).on('close', () => {
-    console.log(chalk.green('\nGuardian Shell deactivated.'));
+  });
+
+  rl.on('close', () => {
+    console.log(chalk.green('\nGuardian Shell closed.'));
     process.exit(0);
   });
 }

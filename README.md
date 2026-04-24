@@ -4,12 +4,15 @@ AI-powered CLI tool that detects and prevents dangerous terminal commands in rea
 
 ---
 
-## 🚀 Quick Start
+## ⚡ Quick Start
 
 ```bash
 npm install -g systemguardian
+guardian config --key YOUR_GEMINI_API_KEY
 guardian on
 ```
+
+That's it. No `.env` file. No manual config. Works globally.
 
 ---
 
@@ -19,34 +22,71 @@ guardian on
 
 ---
 
-## ✨ What This Tool Does
+## 🔑 API Key Setup (One Time Only)
 
-SystemGuardian acts like a **safety layer on top of your terminal**.
+```bash
+guardian config --key YOUR_GEMINI_API_KEY
+```
 
-Whenever you run a command:
+Your key is stored securely at `~/.guardian/config.json` (owner-only permissions).
 
-1. It intercepts the command
-2. Analyzes risk (rule-based engine)
-3. Uses AI to explain consequences
-4. Warns or blocks execution
+Get your free API key → [Google AI Studio](https://aistudio.google.com/app/apikey)
+
+```bash
+guardian config --show      # view saved key (masked)
+guardian config --remove    # remove saved key
+```
+
+> **Without API key** — tool still works using rule-based detection. AI explanations will be disabled.
 
 ---
 
-## 🧠 How It Works (Architecture)
+## 🎬 How It Works
 
-```text
-User Command
-   ↓
-CLI Wrapper (shell.js)
-   ↓
-Analyzer Engine (rules + context)
-   ↓
-Risk Score (0–100)
-   ↓
-AI Layer (Gemini)
-   ↓
-Formatted Output + Warning
 ```
+Your Command
+     ↓
+Guardian Shell (intercepts)
+     ↓
+Rule-based Analyzer (score 0–100)
+     ↓
+AI Layer — Gemini (explains risk)
+     ↓
+Warning / Block / Allow
+```
+
+---
+
+## ▶️ All Commands
+
+### Outside Guardian Shell
+
+| Command | Description |
+|---|---|
+| `guardian on` | Start the protected shell |
+| `guardian off` | Exit reminder |
+| `guardian simulate "cmd"` | Dry-run any command safely |
+| `guardian safe-mode on\|off` | Toggle strict blocking |
+| `guardian status` | Show config and API key status |
+| `guardian config --key KEY` | Save Gemini API key |
+| `guardian config --show` | Show saved key (masked) |
+| `guardian config --remove` | Remove saved key |
+| `guardian install-shell` | Auto-start on terminal open |
+
+### Inside Guardian Shell
+
+| Command | Description |
+|---|---|
+| `history` | Show all commands this session |
+| `last` | Show last command run |
+| `status` | Show guardian config and API status |
+| `info <cmd>` | Explain risk of any command |
+| `ls` / `ls -la` | List files in current directory |
+| `pwd` | Print current directory |
+| `whoami` | Show current user |
+| `clear` | Clear screen |
+| `help` | Show all shell commands |
+| `exit` / `quit` | Exit guardian shell |
 
 ---
 
@@ -56,117 +96,104 @@ Formatted Output + Warning
 guardian simulate "rm -rf /"
 ```
 
-Output:
-
 ```
-🚨 DANGER (Score: 95)
+🚨 DANGER (Score: 95/100)
 
-Explanation: Deletes entire system  
-Consequence: Complete data loss  
-Safer Alternative: Use specific path instead  
+📌 Rule Matched   : Recursive delete on critical system path
+⚡ Impact Summary : Complete and irreversible data loss
+🧠 Explanation    : Deletes every file on the system starting from root
+💣 Consequences   : Full OS destruction — unrecoverable without backup
+🛠️ Safer Alt      : Use specific path e.g. rm -rf ./tmp
+✅ Safe When      : Never on / or ~ without absolute certainty
 ```
 
 ---
 
-## ▶️ Usage
+## 📖 Info Command
 
 ```bash
-guardian on                  # Start protected shell
-guardian off                 # Exit shell
-guardian simulate "<cmd>"    # Test a command
-guardian safe-mode on        # Strict blocking
-guardian install-shell       # Auto-start
-guardian service start       # Background daemon
-guardian help                # Show commands
+# Inside guardian shell:
+info rm -rf
+info chmod 777
+info sudo
+info dd
+info curl
+info wget
+info git push --force
+info docker system prune
+info mkfs
 ```
 
 ---
 
-## 🔐 API Setup (Important)
+## 🛡️ Risk Levels
 
-Create a `.env` file:
+| Score | Level | Action |
+|---|---|---|
+| 0–29 | ✅ Safe | Executes directly |
+| 30–69 | ⚠️ Warning | Shows analysis, executes |
+| 70–100 | 🚨 Danger | Blocks, asks confirmation |
 
-```bash
-GEMINI_API_KEY=your_api_key_here
+### In Safe Mode (`guardian safe-mode on`)
+All dangerous commands (score ≥ 70) are **hard blocked** — no bypass possible.
+
+---
+
+## 🔐 Security Features
+
+- **Shell injection blocked** — metacharacters, backticks, eval, reverse shells
+- **Path traversal blocked** — `../../..` patterns
+- **Rate limiting** — max 30 commands per minute
+- **Command length limit** — max 2048 characters
+- **Secret redaction in logs** — API keys, tokens, passwords never stored in plain text
+- **Config file permissions** — `~/.guardian/config.json` is `600` (owner only)
+- **No kernel-level access** — runs fully in user space
+- **No telemetry** — nothing sent anywhere except your own Gemini API
+
+---
+
+## 📁 Project Structure
+
 ```
-
-👉 Get API key from Google Gemini
-
----
-
-## ⚠️ Without API
-
-* Tool still works
-* Uses rule-based detection
-* AI explanation disabled
-
----
-
-## 📁 Project Structure Explained
-
-```text
-src/core/
-  analyzer.js   → Risk calculation logic  
-  llm.js        → AI integration  
-  rules.json    → Dangerous command patterns  
-
-src/cli/
-  index.js      → CLI entry point  
-  shell.js      → Command interception  
-
-src/daemon/
-  index.js      → Background monitoring  
-
-vscode-extension/
-  extension.js  → Editor integration  
+src/
+  cli/
+    index.js       → CLI entry point + all guardian commands
+    shell.js       → Guardian shell + built-in commands
+    installer.js   → Shell auto-start integration
+    formatter.js   → Terminal output formatting
+  core/
+    analyzer.js    → Risk scoring engine
+    llm.js         → Gemini AI integration
+    config.js      → Global config (~/.guardian/config.json)
+    logger.js      → Secure action logging
+    rules.json     → Dangerous command patterns reference
+  daemon/
+    index.js       → Background stub (reserved)
 ```
-
----
-
-## 🛠️ How You Can Build Something Like This
-
-### Step 1: Capture commands
-
-Use a CLI wrapper (`readline` / shell proxy)
-
-### Step 2: Analyze commands
-
-Create rules:
-
-* rm -rf → high risk
-* chmod 777 → medium risk
-
-### Step 3: Add AI layer
-
-Send command → get explanation
-
-### Step 4: Add safety system
-
-* warning
-* confirmation
-* block
-
----
-
-## 🛡️ Security Notes
-
-* No kernel-level access
-* Runs fully in user space
-* Simulation mode ensures no real execution
-* API key never bundled in package
 
 ---
 
 ## 📦 Local Development
 
 ```bash
+git clone https://github.com/yourusername/systemguardian
+cd systemguardian
 npm install
 npm link
+guardian config --key YOUR_KEY
 guardian on
 ```
 
 ---
 
+## ⚙️ Requirements
+
+- Node.js >= 16
+- Works on Linux, macOS, Windows (PowerShell)
+- Gemini API key (free) — optional but recommended
+
+---
+
 ## 📜 License
 
-MIT
+MIT © Ayush Singh

@@ -1,65 +1,78 @@
-require('dotenv').config();
+'use strict';
+
 const { GoogleGenAI } = require('@google/genai');
+const { getApiKey } = require('./config');
+
+const FALLBACK = {
+  explanation: 'AI unavailable — using rule-based analysis only.',
+  consequences: 'Cannot predict exact consequences without AI, but pattern matches risky behavior.',
+  saferAlternative: 'Review the command carefully before running.',
+  safeWhen: 'You are absolutely sure about the environment and parameters.',
+  impact: 'Potential unexpected system modifications.',
+  confidence: 'LOW'
+};
+
+// Single instance cache — avoids re-creating client on every call
+let _client = null;
+let _lastKey = null;
+
+function getClient() {
+  const key = getApiKey();
+  if (!key) return null;
+  if (_client && key === _lastKey) return _client;
+  _client = new GoogleGenAI({ apiKey: key });
+  _lastKey = key;
+  return _client;
+}
 
 async function getExplanation(command, context, riskScore) {
-  const fallback = {
-    explanation: "API key missing or AI unavailable. Using rule-based fallback.",
-    consequences: "Cannot predict exact consequences without AI, but pattern matches dangerous behavior.",
-    saferAlternative: "Review the command carefully and check documentation.",
-    safeWhen: "You are absolutely sure about the environment and parameters.",
-    impact: "Potential unexpected system modifications.",
-    confidence: "LOW"
-  };
+  const client = getClient();
+  if (!client) return FALLBACK;
 
-  if (!process.env.GEMINI_API_KEY) {
-    return fallback;
-  }
-
-  try {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    const prompt = `
-You are an expert Developer Safety Agent.
-Analyze the following shell command.
+  const prompt = `You are an expert Developer Safety Agent.
+Analyze this shell command and respond ONLY with valid JSON, no markdown, no backticks.
 
 Command: ${command}
-OS Type: ${context.osPlatform}
-Current Working Directory: ${context.cwd}
+OS: ${context.osPlatform}
+CWD: ${context.cwd}
 Risk Score: ${riskScore}/100
-Git Context: ${JSON.stringify(context.git)}
-Docker Context: ${JSON.stringify(context.docker)}
+Git: ${JSON.stringify(context.git)}
+Docker: ${JSON.stringify(context.docker)}
 
-Provide a concise, developer-friendly analysis strictly in JSON format with these exact keys:
-- "explanation": Briefly explain what the command does and why it is risky in this specific context.
-- "consequences": What is the worst-case scenario if it goes wrong?
-- "saferAlternative": Provide a safer alternative command or flag (give OS-specific alternative if needed, e.g. PowerShell vs Bash).
-- "safeWhen": Explain the exact conditions where running this command is considered safe.
-- "impact": A single-line human readable summary of the potential damage.
-- "confidence": Your confidence in this assessment based on the context ("HIGH", "MEDIUM", or "LOW").
-`;
+Return JSON with exactly these keys:
+- "explanation": what this command does and why it is risky
+- "consequences": worst case if it goes wrong
+- "saferAlternative": safer command or flag (OS-specific if needed)
+- "safeWhen": exact conditions where this is safe to run
+- "impact": one line summary of potential damage
+- "confidence": your confidence level — "HIGH", "MEDIUM", or "LOW"`;
 
-    const response = await ai.models.generateContent({
+  try {
+    const response = await client.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
-      config: {
-        responseMimeType: "application/json"
-      }
+      config: { responseMimeType: 'application/json' }
     });
 
-    try {
-      // Clean up markdown wrapping if present
-      const rawText = response.text.replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
-      const parsed = JSON.parse(rawText);
-      return {
-        ...parsed,
-        confidence: parsed.confidence || 'HIGH'
-      };
-    } catch (parseError) {
-      console.error("Failed to parse AI JSON response.");
-      return fallback;
-    }
-  } catch (error) {
-    fallback.explanation = `AI unavailable (Error: ${error.message}). Using rule-based fallback.`;
-    return fallback;
+    const raw = response.text.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
+    const parsed = JSON.parse(raw);
+
+    return {
+      explanation: parsed.explanation || FALLBACK.explanation,
+      consequences: parsed.consequences || FALLBACK.consequences,
+      saferAlternative: parsed.saferAlternative || FALLBACK.saferAlternative,
+      safeWhen: parsed.safeWhen || FALLBACK.safeWhen,
+      impact: parsed.impact || FALLBACK.impact,
+      confidence: ['HIGH', 'MEDIUM', 'LOW'].includes(parsed.confidence)
+        ? parsed.confidence
+        : 'LOW'
+    };
+
+  } catch (err) {
+    return {
+      ...FALLBACK,
+      explanation: `AI error: ${err.message}. Using rule-based fallback.`
+    };
   }
 }
 
