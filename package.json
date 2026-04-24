@@ -1,6 +1,6 @@
 {
   "name": "systemguardian",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "AI-powered CLI tool to detect and prevent dangerous terminal commands with real-time risk analysis and security warnings",
   "main": "src/cli/index.js",
   "type": "commonjs",
