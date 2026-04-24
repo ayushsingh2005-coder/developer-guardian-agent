@@ -1,15 +1,15 @@
 {
   "name": "systemguardian",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AI-powered developer safety agent that monitors and analyzes shell commands in real-time",
   "main": "src/cli/index.js",
   "type": "commonjs",
   "bin": {
-    "guardian": "./src/cli/index.js"
+    "guardian": "src/cli/index.js"
   },
   "scripts": {
-    "start": "node ./src/cli/index.js",
-    "postinstall": "node ./src/cli/installer.js --postinstall"
+    "start": "node src/cli/index.js",
+    "postinstall": "node src/cli/installer.js --postinstall"
   },
   "keywords": [
     "cli",
@@ -26,6 +26,9 @@
     "vscode-extension",
     "README.md"
   ],
+  "engines": {
+    "node": ">=16"
+  },
   "dependencies": {
     "@google/genai": "^1.50.1",
     "chalk": "^4.1.2",
