@@ -2,7 +2,7 @@
   "name": "systemguardian",
   "version": "1.0.0",
   "description": "AI-powered developer safety agent that monitors and analyzes shell commands in real-time",
-  "main": "index.js",
+  "main": "src/cli/index.js",
   "type": "commonjs",
   "bin": {
     "guardian": "./src/cli/index.js"
@@ -21,6 +21,11 @@
   ],
   "author": "Ayush Singh",
   "license": "MIT",
+  "files": [
+    "src",
+    "vscode-extension",
+    "README.md"
+  ],
   "dependencies": {
     "@google/genai": "^1.50.1",
     "chalk": "^4.1.2",
