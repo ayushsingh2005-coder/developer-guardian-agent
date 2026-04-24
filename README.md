@@ -111,7 +111,7 @@ Guardian helps prevent dangerous operations (like `rm -rf /`, `chmod 777`, etc.)
 
 ---
 
-## 📦 Installation
+## 🚀 Quick Start
 
-```bash
-npm install -g systemguardian
+npm install -g systemguardian  
+guardian on
