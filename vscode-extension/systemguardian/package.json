@@ -1,0 +1,70 @@
+{
+  "name": "systemguardian",
+  "displayName": "SystemGuardian",
+  "description": "AI-powered terminal safety — detects dangerous commands in real-time",
+  "version": "1.0.0",
+  "publisher": "ayushsingh2005-coder",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Other"],
+  "keywords": ["security", "terminal", "ai", "cli", "safety"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "systemguardian.analyzeCommand",
+        "title": "Guardian: Analyze Selected Command"
+      },
+      {
+        "command": "systemguardian.openShell",
+        "title": "Guardian: Open Protected Terminal"
+      },
+      {
+        "command": "systemguardian.setApiKey",
+        "title": "Guardian: Set Gemini API Key"
+      },
+      {
+        "command": "systemguardian.showStatus",
+        "title": "Guardian: Show Status"
+      }
+    ],
+    "configuration": {
+      "title": "SystemGuardian",
+      "properties": {
+        "systemguardian.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Your Gemini API Key for AI-powered analysis"
+        },
+        "systemguardian.safeMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable strict blocking mode"
+        },
+        "systemguardian.enableTerminalMonitoring": {
+          "type": "boolean",
+          "default": true,
+          "description": "Monitor terminal commands in real-time"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "pretest": "npm run lint",
+    "test": "node ./test/runTest.js"
+  },
+  "devDependencies": {
+    "@vscode/test-electron": "^2.3.0",
+    "eslint": "^8.47.0"
+  },
+  "dependencies": {
+    "@google/genai": "^1.50.1"
+  },
+  "repository": {
+  "type": "git",
+  "url": "https://github.com/ayushsingh2005-coder/developer-guardian-agent"
+  }
+}
