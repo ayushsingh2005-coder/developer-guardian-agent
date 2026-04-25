@@ -32,7 +32,9 @@
   "author": "Ayush Singh",
   "license": "MIT",
   "files": [
-    "src",
+    "src/cli",
+    "src/core",
+    "src/daemon",
     "README.md"
   ],
   "engines": {
