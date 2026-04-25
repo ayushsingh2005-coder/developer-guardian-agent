@@ -1,5 +1,11 @@
-.env
+# Dev files
 logs/
 *.log
+.env
+
+# VS Code extension — poora folder exclude
+vscode-extension/
+
+# Other
 node_modules/
 .vscode/
