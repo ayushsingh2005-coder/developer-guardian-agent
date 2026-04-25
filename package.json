@@ -33,7 +33,6 @@
   "license": "MIT",
   "files": [
     "src",
-    "vscode-extension",
     "README.md"
   ],
   "engines": {
