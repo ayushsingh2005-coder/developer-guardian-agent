@@ -1,5 +1,6 @@
 # Dev files
 logs/
+src/logs/
 *.log
 .env
 
