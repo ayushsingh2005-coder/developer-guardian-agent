@@ -33,6 +33,8 @@ const BUILT_IN_RULES = [
   },
 ];
 
+const DANGEROUS_GIT_COMMANDS = ["git push --force", "git reset --hard", "git clean -fdx"];
+
 function normalizeCommand(command) {
   return String(command || "")
     .trim()
@@ -44,19 +46,31 @@ function stringArray(value) {
   return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
 }
 
-function analyzeCommand(command, policy) {
+function analyzeCommand(command, policy, context) {
   const normalized = normalizeCommand(command);
   const blockedRules = stringArray(policy && policy.blocked);
   const warnRules = stringArray(policy && policy.warn);
+  const protectedBranches = stringArray(policy && policy.protectedBranches);
+  const currentBranch = context && context.currentBranch;
   const matchedRule = BUILT_IN_RULES.find((rule) => normalized.includes(rule.pattern)) || null;
+  const blockedByPolicy = blockedRules.some((pattern) => normalized.includes(normalizeCommand(pattern)));
+  const warnedByPolicy = warnRules.some((pattern) => normalized.includes(normalizeCommand(pattern)));
+  const protectedBranchMatch =
+    typeof currentBranch === "string" &&
+    protectedBranches.includes(currentBranch) &&
+    DANGEROUS_GIT_COMMANDS.some((pattern) => normalized.includes(pattern));
 
   return {
-    blocked: blockedRules.some((pattern) => normalized.includes(normalizeCommand(pattern))),
-    warned: warnRules.some((pattern) => normalized.includes(normalizeCommand(pattern))),
-    score: matchedRule ? matchedRule.score : 0,
+    blocked: blockedByPolicy || protectedBranchMatch,
+    warned: warnedByPolicy,
+    score: protectedBranchMatch ? Math.max(matchedRule ? matchedRule.score : 0, 95) : matchedRule ? matchedRule.score : 0,
     matchedRule,
     saferAlternative: matchedRule ? matchedRule.saferAlternative : null,
-    explanation: matchedRule ? matchedRule.explanation : null,
+    explanation: protectedBranchMatch
+      ? `Protected branch detected: ${currentBranch}`
+      : matchedRule
+        ? matchedRule.explanation
+        : null,
   };
 }
 

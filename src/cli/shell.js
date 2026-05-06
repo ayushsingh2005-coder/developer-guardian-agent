@@ -11,6 +11,7 @@ const { logAction } = require('../core/logger');
 const { loadConfig, saveConfig } = require('../core/config');
 const { loadPolicy } = require('../core/policy');
 const { analyzeCommand: analyzePolicyCommand } = require('../core/ruleEngine');
+const { getCurrentBranch } = require('../core/gitContext');
 const { printAnalysis } = require('./formatter');
 
 const isWindows = os.platform() === 'win32';
@@ -364,7 +365,8 @@ async function handleCommand(command, rl, simulate = false) {
   const config = loadConfig();
   const analysis = analyzer.analyzeCommand(trimmed);
   const policy = loadPolicy();
-  const policyResult = analyzePolicyCommand(trimmed, policy);
+  const currentBranch = getCurrentBranch();
+  const policyResult = analyzePolicyCommand(trimmed, policy, { currentBranch });
 
   if (policyResult.blocked === true) {
     printPolicyResult(policyResult, trimmed, '\u274c BLOCKED by project policy', chalk.red.bold);
