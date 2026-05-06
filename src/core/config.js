@@ -11,7 +11,8 @@ const CONFIG_PATH = path.join(GUARDIAN_DIR, 'config.json');
 const DEFAULT_CONFIG = {
   apiKey: null,
   trustedCommands: [],
-  safeMode: false
+  safeMode: false,
+  localOnly: false
 };
 
 function validateConfig(raw) {
@@ -23,6 +24,7 @@ function validateConfig(raw) {
       ? raw.apiKey.trim()
       : null,
     safeMode: typeof raw.safeMode === 'boolean' ? raw.safeMode : false,
+    localOnly: typeof raw.localOnly === 'boolean' ? raw.localOnly : false,
     trustedCommands: Array.isArray(raw.trustedCommands)
       ? raw.trustedCommands
           .filter(cmd => typeof cmd === 'string' && cmd.trim().length > 0)
@@ -58,7 +60,8 @@ function saveConfig(config) {
 }
 
 function getApiKey() {
-  return loadConfig().apiKey || null;
+  const config = loadConfig();
+  return config.localOnly ? null : config.apiKey || null;
 }
 
 function setApiKey(key) {

@@ -1,6 +1,6 @@
 {
   "name": "systemguardian",
-  "version": "1.3.0",
+  "version": "1.2.1",
   "description": "AI-powered CLI tool to detect and prevent dangerous terminal commands with real-time risk analysis and security warnings",
   "main": "src/cli/index.js",
   "type": "commonjs",
@@ -8,8 +8,7 @@
     "guardian": "src/cli/index.js"
   },
   "scripts": {
-    "start": "node src/cli/index.js",
-    "postinstall": "node src/cli/installer.js --postinstall"
+    "start": "node src/cli/index.js"
   },
   "keywords": [
     "cli",
@@ -35,7 +34,8 @@
     "src/cli",
     "src/core",
     "src/daemon",
-    "README.md"
+    "README.md",
+    "SECURITY.md"
   ],
   "engines": {
     "node": ">=16"

@@ -50,11 +50,6 @@ function stopService() {
   console.log(chalk.gray('Use Task Manager / kill process.'));
 }
 
-if (process.argv.includes('--postinstall')) {
-  console.log(chalk.cyan('Thank you for installing Developer Guardian.'));
-  console.log(chalk.cyan('Run: guardian install-shell'));
-}
-
 module.exports = {
   installShell,
   startService,

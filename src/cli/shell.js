@@ -162,10 +162,13 @@ function handleBuiltins(trimmed, rl) {
   // status
   if (trimmed === 'status') {
     const config = loadConfig();
+    const aiEnabled = Boolean(config.apiKey && !config.localOnly);
     console.log(chalk.bold('\n🛡️  Guardian Status'));
     console.log(chalk.gray('─────────────────────────────'));
     console.log(`  Safe Mode  : ${config.safeMode ? chalk.green('ON') : chalk.yellow('OFF')}`);
     console.log(`  API Key    : ${config.apiKey ? chalk.green('Configured ✓') : chalk.red('Not set — run: guardian config --key YOUR_KEY')}`);
+    console.log(`  AI analysis: ${aiEnabled ? chalk.green('enabled') : chalk.yellow('disabled')}`);
+    console.log(`  Local-only : ${config.localOnly ? chalk.green('enabled') : chalk.yellow('disabled')}`);
     console.log(`  Session Cmds: ${chalk.cyan(sessionHistory.length)}`);
     console.log(`  Platform   : ${chalk.cyan(os.platform())} / ${chalk.cyan(os.arch())}`);
     console.log(chalk.gray('─────────────────────────────\n'));

@@ -4,6 +4,7 @@
 const chalk = require('chalk');
 const { startShell } = require('./shell');
 const { loadConfig, saveConfig, setApiKey, getApiKey, CONFIG_PATH, GUARDIAN_DIR } = require('../core/config');
+const { installShell } = require('./installer');
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -31,7 +32,7 @@ if (command === 'config') {
   }
 
   if (flag === '--show') {
-    const key = getApiKey();
+    const key = loadConfig().apiKey;
     if (!key) {
       console.log(chalk.yellow('No API key configured.'));
       console.log(chalk.gray('Run: guardian config --key YOUR_GEMINI_API_KEY'));
@@ -52,19 +53,42 @@ if (command === 'config') {
     process.exit(0);
   }
 
+  if (flag === '--local-only') {
+    const config = loadConfig();
+
+    if (value === 'on') {
+      config.localOnly = true;
+      saveConfig(config);
+      console.log(chalk.green('Local-only mode enabled. Gemini API usage disabled.'));
+    } else if (value === 'off') {
+      config.localOnly = false;
+      saveConfig(config);
+      console.log(chalk.yellow('Local-only mode disabled. Gemini AI can run when an API key is configured.'));
+    } else {
+      console.log(chalk.red('Usage: guardian config --local-only on|off'));
+      process.exit(1);
+    }
+    process.exit(0);
+  }
+
   console.log(chalk.bold('\n🔧 Guardian Config'));
   console.log(chalk.gray('──────────────────────────────────────'));
   console.log(`  ${chalk.cyan('guardian config --key <KEY>')}   Save Gemini API key`);
   console.log(`  ${chalk.cyan('guardian config --show')}        Show saved key (masked)`);
   console.log(`  ${chalk.cyan('guardian config --remove')}      Remove saved key`);
+  console.log(`  ${chalk.cyan('guardian config --local-only on|off')} Disable or enable external AI requests`);
   console.log(chalk.gray('──────────────────────────────────────\n'));
   process.exit(0);
 }
 
 // ── guardian on ─────────────────────────────────────────────
 else if (command === 'on') {
+  const config = loadConfig();
   const key = getApiKey();
-  if (!key) {
+  if (config.localOnly) {
+    console.log(chalk.yellow('\nLocal-only mode enabled - AI analysis disabled.'));
+    console.log(chalk.gray('   Deterministic rules only. No external requests will be made.\n'));
+  } else if (!key) {
     console.log(chalk.yellow('\n⚠️  No API key configured — AI analysis disabled.'));
     console.log(chalk.gray('   To enable AI: guardian config --key YOUR_GEMINI_API_KEY\n'));
   } else {
@@ -110,13 +134,21 @@ else if (command === 'safe-mode') {
 }
 
 // ── guardian status ──────────────────────────────────────────
+else if (command === 'install-shell') {
+  installShell();
+  process.exit(0);
+}
+
 else if (command === 'status') {
   const config = loadConfig();
-  const key = getApiKey();
+  const key = config.apiKey;
+  const aiEnabled = Boolean(key && !config.localOnly);
   console.log(chalk.bold('\n🛡️  Guardian Status'));
   console.log(chalk.gray('──────────────────────────────────────'));
   console.log(`  Safe Mode     : ${config.safeMode ? chalk.green('ON') : chalk.yellow('OFF')}`);
   console.log(`  AI (Gemini)   : ${key ? chalk.green('Configured ✓') : chalk.red('Not set')}`);
+  console.log(`  AI analysis   : ${aiEnabled ? chalk.green('enabled') : chalk.yellow('disabled')}`);
+  console.log(`  Local-only mode: ${config.localOnly ? chalk.green('enabled') : chalk.yellow('disabled')}`);
   console.log(`  Config file   : ${chalk.gray(CONFIG_PATH)}`);
   console.log(`  Trusted cmds  : ${chalk.cyan(config.trustedCommands.length)}`);
   console.log(chalk.gray('──────────────────────────────────────\n'));
@@ -137,6 +169,8 @@ else {
     ['config --key <KEY>',        'Save your Gemini API key (one time)'],
     ['config --show',             'Show saved API key (masked)'],
     ['config --remove',           'Remove saved API key'],
+    ['config --local-only on|off', 'Disable or enable external AI requests'],
+    ['install-shell',              'Opt into shell auto-start integration'],
   ];
 
   cmds.forEach(([cmd, desc]) => {

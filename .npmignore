@@ -1,12 +1,42 @@
-# Dev files
+# Logs and runtime output
 logs/
 src/logs/
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local secrets and config
 .env
+.env.*
+.guardianrc
+*.local
+*.local.*
 
-# VS Code extension — poora folder exclude
-vscode-extension/
-
-# Other
+# Dependencies and caches
 node_modules/
+.npm/
+.cache/
+coverage/
+
+# Tests and screenshots
+test/
+tests/
+__tests__/
+*.test.js
+*.spec.js
+screenshots/
+*.png
+*.jpg
+*.jpeg
+
+# Editor, extension, and temporary files
 .vscode/
+.idea/
+vscode-extension/
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+*.swo
