@@ -1,0 +1,28 @@
+{
+"safeMode": true,
+
+"protectedBranches": [
+"main",
+"master",
+"release/*"
+],
+
+"productionKeywords": [
+"prod",
+"production",
+"staging"
+],
+
+"blocked": [
+"terraform destroy",
+"kubectl delete namespace",
+"aws s3 rm --recursive"
+],
+
+"warn": [
+"git push --force",
+"git reset --hard",
+"docker compose down -v",
+"npm publish"
+]
+}

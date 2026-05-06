@@ -9,6 +9,8 @@ const analyzer = require('../core/analyzer');
 const { getExplanation } = require('../core/llm');
 const { logAction } = require('../core/logger');
 const { loadConfig, saveConfig } = require('../core/config');
+const { loadPolicy } = require('../core/policy');
+const { analyzeCommand: analyzePolicyCommand } = require('../core/ruleEngine');
 const { printAnalysis } = require('./formatter');
 
 const isWindows = os.platform() === 'win32';
@@ -251,6 +253,19 @@ function printCommandInfo(cmd) {
   console.log(chalk.gray('─────────────────────────────────────\n'));
 }
 
+function printPolicyResult(result, command, title, color) {
+  console.log(color(`\n${title}`));
+  console.log(chalk.gray(`Command: ${command}`));
+
+  if (result.explanation) {
+    console.log(chalk.gray(`Explanation: ${result.explanation}`));
+  }
+
+  if (result.saferAlternative) {
+    console.log(chalk.gray(`Safer alternative: ${result.saferAlternative}`));
+  }
+}
+
 function printHelp() {
   console.log(chalk.bold('\n🛡️  Guardian Shell — Available Commands'));
   console.log(chalk.gray('════════════════════════════════════════'));
@@ -348,6 +363,45 @@ async function handleCommand(command, rl, simulate = false) {
 
   const config = loadConfig();
   const analysis = analyzer.analyzeCommand(trimmed);
+  const policy = loadPolicy();
+  const policyResult = analyzePolicyCommand(trimmed, policy);
+
+  if (policyResult.blocked === true) {
+    printPolicyResult(policyResult, trimmed, '\u274c BLOCKED by project policy', chalk.red.bold);
+    logAction('BLOCKED_POLICY', trimmed, policyResult.score);
+    rl.prompt();
+    return;
+  }
+
+  if (policyResult.warned === true) {
+    printPolicyResult(policyResult, trimmed, 'WARNING by project policy', chalk.yellow.bold);
+
+    if (simulate) {
+      console.log(chalk.blue('\n[Dry Run] WARNING - would require confirmation.'));
+      rl.prompt();
+      return;
+    }
+
+    logAction('POLICY_WARNING', trimmed, policyResult.score);
+
+    rl.question(chalk.yellow('Continue? (y/n) '), async (answer) => {
+      const a = answer.trim().toLowerCase();
+      if (a === 'y' || a === 'yes') {
+        logAction('POLICY_WARNING_ACCEPTED', trimmed, policyResult.score);
+        await continueCommand(trimmed, rl, config, analysis, simulate);
+      } else {
+        logAction('POLICY_WARNING_PREVENTED', trimmed, policyResult.score);
+        console.log(chalk.green('Command cancelled.'));
+        rl.prompt();
+      }
+    });
+    return;
+  }
+
+  await continueCommand(trimmed, rl, config, analysis, simulate);
+}
+
+async function continueCommand(trimmed, rl, config, analysis, simulate) {
 
   // Trusted command — skip analysis
   if (config.trustedCommands.includes(trimmed)) {
